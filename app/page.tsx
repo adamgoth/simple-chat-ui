@@ -1,101 +1,197 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+} from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Message } from '@/types/message';
+import type { Conversation } from '@/types/conversation';
+
+export default function ChatPage() {
+  const [modelType, setModelType] = useState<'ollama' | 'openrouter'>('ollama');
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<
+    string | null
+  >(null);
+
+  // New states to replace useChat
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+  };
+
+  const sendMessage = async (message: string) => {
+    try {
+      setIsLoading(true);
+
+      // Add user message to the UI immediately
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: message,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      // Send the message to the appropriate API endpoint
+      const response = await fetch(
+        modelType === 'openrouter'
+          ? '/api/chat-openrouter'
+          : '/api/chat-ollama',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ messages: [...messages, userMessage] }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const data = await response.json();
+
+      // Add assistant's response to the messages
+      const assistantMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: data.content || data.message,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      // Optionally handle error in UI
+    } finally {
+      setIsLoading(false);
+      setInput('');
+    }
+  };
+
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!currentConversationId) {
+      createNewConversation();
+    }
+    if (input.trim()) {
+      await sendMessage(input);
+    }
+  };
+
+  const createNewConversation = () => {
+    const newConversation: Conversation = {
+      id: Date.now().toString(),
+      title: `Conversation ${conversations.length + 1}`,
+      messages: [],
+    };
+    setConversations([...conversations, newConversation]);
+    setCurrentConversationId(newConversation.id);
+  };
+
+  const selectConversation = (conversationId: string) => {
+    setCurrentConversationId(conversationId);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div className='container mx-auto max-w-6xl pt-10 flex'>
+      <div className='w-1/4 pr-4'>
+        <Card className='h-[calc(100vh-5rem)] overflow-y-auto'>
+          <CardHeader>
+            <CardTitle>Conversations</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={createNewConversation} className='w-full mb-4'>
+              New Conversation
+            </Button>
+            {conversations.map((conversation) => (
+              <Button
+                key={conversation.id}
+                onClick={() => selectConversation(conversation.id)}
+                variant={
+                  currentConversationId === conversation.id
+                    ? 'default'
+                    : 'ghost'
+                }
+                className='w-full justify-start mb-2'
+              >
+                {conversation.title}
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+      <div className='w-3/4'>
+        <Card className='h-[calc(100vh-5rem)] flex flex-col'>
+          <CardHeader>
+            <CardTitle>Chatbot UI</CardTitle>
+            <Select
+              value={modelType}
+              onValueChange={(value: 'ollama' | 'openrouter') =>
+                setModelType(value)
+              }
+            >
+              <SelectTrigger className='w-[180px]'>
+                <SelectValue placeholder='Select model' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='ollama'>Ollama</SelectItem>
+                <SelectItem value='openrouter'>OpenRouter</SelectItem>
+              </SelectContent>
+            </Select>
+          </CardHeader>
+          <CardContent className='flex-grow overflow-y-auto'>
+            <div className='space-y-4'>
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`rounded-lg p-2 ${
+                      message.role === 'user'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-200 text-black'
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+          <CardFooter>
+            <form onSubmit={handleFormSubmit} className='flex w-full space-x-2'>
+              <Input
+                value={input}
+                onChange={handleInputChange}
+                placeholder='Type your message...'
+                className='flex-grow'
+              />
+              <Button type='submit' disabled={isLoading}>
+                {isLoading ? 'Sending...' : 'Send'}
+              </Button>
+            </form>
+          </CardFooter>
+        </Card>
+      </div>
     </div>
   );
 }
