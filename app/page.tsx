@@ -20,6 +20,37 @@ import {
 import { Message } from '@/types/message';
 import type { Conversation } from '@/types/conversation';
 
+const OPENROUTER_MODELS = [
+  {
+    id: 'google/gemini-2.0-flash-001',
+    name: 'Gemini 2.0 Flash',
+  },
+  {
+    id: 'deepseek/deepseek-r1:free',
+    name: 'DeepSeek R1',
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct',
+    name: 'Llama 3.3 70B',
+  },
+  {
+    id: 'openai/gpt-4o-mini',
+    name: 'GPT-4 Mini',
+  },
+  {
+    id: 'google/gemini-flash-1.5',
+    name: 'Gemini Flash 1.5',
+  },
+  {
+    id: 'qwen/qwq-32b:free',
+    name: 'Qwen 32B',
+  },
+  {
+    id: 'qwen/qwen-2.5-7b-instruct',
+    name: 'Qwen 2.5 7B',
+  },
+] as const;
+
 export default function ChatPage() {
   const [modelType, setModelType] = useState<'ollama' | 'openrouter'>('ollama');
   const [model, setModel] = useState<string>('llama2');
@@ -68,6 +99,10 @@ export default function ChatPage() {
     try {
       setIsLoading(true);
 
+      if (!model) {
+        throw new Error('Please select a model first');
+      }
+
       // Add user message to the UI immediately
       const userMessage: Message = {
         id: Date.now().toString(),
@@ -75,6 +110,12 @@ export default function ChatPage() {
         content: message,
       };
       setMessages((prev) => [...prev, userMessage]);
+
+      // Prepare the request body based on model type
+      const requestBody = {
+        messages: [...messages, userMessage],
+        model: model,
+      };
 
       // Send the message to the appropriate API endpoint
       const response = await fetch(
@@ -86,15 +127,13 @@ export default function ChatPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            messages: [...messages, userMessage],
-            model: model,
-          }),
+          body: JSON.stringify(requestBody),
         },
       );
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send message');
       }
 
       const data = await response.json();
@@ -108,7 +147,8 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
-      // Optionally handle error in UI
+      // TODO: Add error handling in UI
+      alert(error instanceof Error ? error.message : 'Failed to send message');
     } finally {
       setIsLoading(false);
       setInput('');
@@ -194,21 +234,17 @@ export default function ChatPage() {
                   <SelectValue placeholder='Select model' />
                 </SelectTrigger>
                 <SelectContent>
-                  {modelType === 'ollama' ? (
-                    ollamaModels.map((modelName) => (
-                      <SelectItem key={modelName} value={modelName}>
-                        {modelName}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <>
-                      <SelectItem value='gpt-3.5-turbo'>
-                        GPT-3.5 Turbo
-                      </SelectItem>
-                      <SelectItem value='gpt-4'>GPT-4</SelectItem>
-                      <SelectItem value='claude-2'>Claude 2</SelectItem>
-                    </>
-                  )}
+                  {modelType === 'ollama'
+                    ? ollamaModels.map((modelName) => (
+                        <SelectItem key={modelName} value={modelName}>
+                          {modelName}
+                        </SelectItem>
+                      ))
+                    : OPENROUTER_MODELS.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
                 </SelectContent>
               </Select>
             </div>
