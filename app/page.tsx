@@ -22,6 +22,7 @@ import type { Conversation } from '@/types/conversation';
 
 export default function ChatPage() {
   const [modelType, setModelType] = useState<'ollama' | 'openrouter'>('ollama');
+  const [model, setModel] = useState<string>('llama2');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
@@ -58,7 +59,10 @@ export default function ChatPage() {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ messages: [...messages, userMessage] }),
+          body: JSON.stringify({
+            messages: [...messages, userMessage],
+            model: model,
+          }),
         },
       );
 
@@ -140,20 +144,45 @@ export default function ChatPage() {
         <Card className='h-[calc(100vh-5rem)] flex flex-col'>
           <CardHeader>
             <CardTitle>Chatbot UI</CardTitle>
-            <Select
-              value={modelType}
-              onValueChange={(value: 'ollama' | 'openrouter') =>
-                setModelType(value)
-              }
-            >
-              <SelectTrigger className='w-[180px]'>
-                <SelectValue placeholder='Select model' />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='ollama'>Ollama</SelectItem>
-                <SelectItem value='openrouter'>OpenRouter</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className='flex gap-4'>
+              <Select
+                value={modelType}
+                onValueChange={(value: 'ollama' | 'openrouter') =>
+                  setModelType(value)
+                }
+              >
+                <SelectTrigger className='w-[180px]'>
+                  <SelectValue placeholder='Select model type' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='ollama'>Ollama</SelectItem>
+                  <SelectItem value='openrouter'>OpenRouter</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger className='w-[180px]'>
+                  <SelectValue placeholder='Select model' />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelType === 'ollama' ? (
+                    <>
+                      <SelectItem value='llama2'>Llama 2</SelectItem>
+                      <SelectItem value='codellama'>CodeLlama</SelectItem>
+                      <SelectItem value='mistral'>Mistral</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value='gpt-3.5-turbo'>
+                        GPT-3.5 Turbo
+                      </SelectItem>
+                      <SelectItem value='gpt-4'>GPT-4</SelectItem>
+                      <SelectItem value='claude-2'>Claude 2</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
           </CardHeader>
           <CardContent className='flex-grow overflow-y-auto'>
             <div className='space-y-4'>

@@ -6,7 +6,7 @@ export async function POST(req: Request) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'deepseek-r1',
+        model: 'llama3.1',
         messages: messages,
       }),
     });
@@ -15,9 +15,23 @@ export async function POST(req: Request) {
       throw new Error('Failed to fetch from Ollama');
     }
 
-    const data = await response.json();
+    const responseText = await response.text();
+    const jsonLines = responseText.trim().split('\n');
+    let fullContent = '';
 
-    return new Response(JSON.stringify({ content: data.message }), {
+    // Process each line of the response
+    for (const line of jsonLines) {
+      try {
+        const data = JSON.parse(line);
+        if (data.message?.content) {
+          fullContent += data.message.content;
+        }
+      } catch (error) {
+        console.error('Error parsing line:', error);
+      }
+    }
+
+    return new Response(JSON.stringify({ content: fullContent }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
