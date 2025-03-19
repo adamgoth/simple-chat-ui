@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input, TextArea } from '@/components/ui/input';
 import {
   Card,
   CardHeader,
@@ -103,7 +103,7 @@ export default function ChatPage() {
     }
   }, [currentConversationId, conversations]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
   };
 
@@ -176,6 +176,24 @@ export default function ChatPage() {
     } finally {
       setIsLoading(false);
       setInput('');
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      if (e.shiftKey) {
+        // Allow default behavior for Shift+Enter (new line)
+        return;
+      } else {
+        // Prevent default form submission and send message
+        e.preventDefault();
+        if (input.trim()) {
+          if (!currentConversationId) {
+            createNewConversation();
+          }
+          sendMessage(input);
+        }
+      }
     }
   };
 
@@ -298,9 +316,10 @@ export default function ChatPage() {
           </CardContent>
           <CardFooter>
             <form onSubmit={handleFormSubmit} className='flex w-full space-x-2'>
-              <Input
+              <TextArea
                 value={input}
                 onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
                 placeholder='Type your message...'
                 className='flex-grow'
               />
