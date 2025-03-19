@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Message } from '@/types/message';
 import type { Conversation } from '@/types/conversation';
+import { ChatMarkdownRenderer } from '@/components/ChatMarkdownRenderer';
 
 const OPENROUTER_MODELS = [
   {
@@ -294,22 +295,17 @@ export default function ChatPage() {
           </CardHeader>
           <CardContent className='flex-grow overflow-y-auto'>
             <div className='space-y-4'>
-              {messages.map((message, index) => (
+              {messages.map((message) => (
                 <div
-                  key={index}
+                  key={message.id}
                   className={`flex ${
                     message.role === 'user' ? 'justify-end' : 'justify-start'
                   }`}
                 >
-                  <div
-                    className={`rounded-lg p-2 ${
-                      message.role === 'user'
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-gray-200 text-black'
-                    }`}
-                  >
-                    {message.content}
-                  </div>
+                  <ChatMarkdownRenderer
+                    content={message.content}
+                    isUser={message.role === 'user'}
+                  />
                 </div>
               ))}
             </div>
