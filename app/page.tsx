@@ -91,8 +91,31 @@ export default function ChatPage() {
     }
   }, [modelType]);
 
+  // Sync messages with current conversation
+  useEffect(() => {
+    if (currentConversationId) {
+      const currentConversation = conversations.find(
+        (conv) => conv.id === currentConversationId,
+      );
+      if (currentConversation) {
+        setMessages(currentConversation.messages);
+      }
+    }
+  }, [currentConversationId, conversations]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
+  };
+
+  const updateConversationMessages = (newMessages: Message[]) => {
+    setConversations((prevConversations) =>
+      prevConversations.map((conv) =>
+        conv.id === currentConversationId
+          ? { ...conv, messages: newMessages }
+          : conv,
+      ),
+    );
+    setMessages(newMessages);
   };
 
   const sendMessage = async (message: string) => {
@@ -109,11 +132,12 @@ export default function ChatPage() {
         role: 'user',
         content: message,
       };
-      setMessages((prev) => [...prev, userMessage]);
+      const updatedMessages = [...messages, userMessage];
+      updateConversationMessages(updatedMessages);
 
       // Prepare the request body based on model type
       const requestBody = {
-        messages: [...messages, userMessage],
+        messages: updatedMessages,
         model: model,
       };
 
@@ -144,7 +168,7 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.content || data.message,
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+      updateConversationMessages([...updatedMessages, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       // TODO: Add error handling in UI
@@ -173,6 +197,7 @@ export default function ChatPage() {
     };
     setConversations([...conversations, newConversation]);
     setCurrentConversationId(newConversation.id);
+    setMessages([]);
   };
 
   const selectConversation = (conversationId: string) => {
