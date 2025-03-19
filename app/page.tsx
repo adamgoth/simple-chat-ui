@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -23,6 +23,7 @@ import type { Conversation } from '@/types/conversation';
 export default function ChatPage() {
   const [modelType, setModelType] = useState<'ollama' | 'openrouter'>('ollama');
   const [model, setModel] = useState<string>('llama2');
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
@@ -32,6 +33,32 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch Ollama models on component mount
+  useEffect(() => {
+    const fetchOllamaModels = async () => {
+      try {
+        const response = await fetch('/api/ollama-models');
+        if (!response.ok) {
+          throw new Error('Failed to fetch models');
+        }
+        const data = await response.json();
+        const modelNames =
+          data.models?.map((model: { name: string }) => model.name) || [];
+        setOllamaModels(modelNames);
+        // Set default model if available
+        if (modelNames.length > 0 && modelType === 'ollama') {
+          setModel(modelNames[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching Ollama models:', error);
+      }
+    };
+
+    if (modelType === 'ollama') {
+      fetchOllamaModels();
+    }
+  }, [modelType]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
@@ -147,9 +174,11 @@ export default function ChatPage() {
             <div className='flex gap-4'>
               <Select
                 value={modelType}
-                onValueChange={(value: 'ollama' | 'openrouter') =>
-                  setModelType(value)
-                }
+                onValueChange={(value: 'ollama' | 'openrouter') => {
+                  setModelType(value);
+                  // Reset model selection when switching types
+                  setModel('');
+                }}
               >
                 <SelectTrigger className='w-[180px]'>
                   <SelectValue placeholder='Select model type' />
@@ -166,11 +195,11 @@ export default function ChatPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {modelType === 'ollama' ? (
-                    <>
-                      <SelectItem value='llama2'>Llama 2</SelectItem>
-                      <SelectItem value='codellama'>CodeLlama</SelectItem>
-                      <SelectItem value='mistral'>Mistral</SelectItem>
-                    </>
+                    ollamaModels.map((modelName) => (
+                      <SelectItem key={modelName} value={modelName}>
+                        {modelName}
+                      </SelectItem>
+                    ))
                   ) : (
                     <>
                       <SelectItem value='gpt-3.5-turbo'>
