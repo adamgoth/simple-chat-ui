@@ -20,6 +20,7 @@ import {
 import { Message } from '@/types/message';
 import type { Conversation } from '@/types/conversation';
 import { ChatMarkdownRenderer } from '@/components/ChatMarkdownRenderer';
+import { useEnvKey } from '@/hooks/useEnvKey';
 
 const OPENROUTER_MODELS = [
   {
@@ -60,13 +61,22 @@ export default function ChatPage() {
   const [currentConversationId, setCurrentConversationId] = useState<
     string | null
   >(null);
-
-  // New states to replace useChat
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch Ollama models on component mount
+  // Simplified hook usage
+  const { hasKey: hasOpenRouterKey } = useEnvKey('OPENROUTER_API_KEY');
+
+  // If OpenRouter is selected but there's no key, switch to Ollama
+  useEffect(() => {
+    if (modelType === 'openrouter' && !hasOpenRouterKey) {
+      setModelType('ollama');
+      setModel('');
+    }
+  }, [modelType, hasOpenRouterKey]);
+
+  // Fetch Ollama models on component mount and when switching to Ollama
   useEffect(() => {
     const fetchOllamaModels = async () => {
       try {
@@ -78,8 +88,9 @@ export default function ChatPage() {
         const modelNames =
           data.models?.map((model: { name: string }) => model.name) || [];
         setOllamaModels(modelNames);
-        // Set default model if available
-        if (modelNames.length > 0 && modelType === 'ollama') {
+
+        // Set default model if we don't have one selected yet
+        if (modelNames.length > 0 && (!model || modelType === 'ollama')) {
           setModel(modelNames[0]);
         }
       } catch (error) {
@@ -87,10 +98,11 @@ export default function ChatPage() {
       }
     };
 
+    // Fetch on mount or when switching to Ollama
     if (modelType === 'ollama') {
       fetchOllamaModels();
     }
-  }, [modelType]);
+  }, [modelType, model]); // Added model to dependencies
 
   // Sync messages with current conversation
   useEffect(() => {
@@ -287,6 +299,9 @@ export default function ChatPage() {
               <Select
                 value={modelType}
                 onValueChange={(value: 'ollama' | 'openrouter') => {
+                  if (value === 'openrouter' && !hasOpenRouterKey) {
+                    return;
+                  }
                   setModelType(value);
                   // Reset model selection when switching types
                   setModel('');
@@ -297,7 +312,16 @@ export default function ChatPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value='ollama'>Ollama</SelectItem>
-                  <SelectItem value='openrouter'>OpenRouter</SelectItem>
+                  <SelectItem value='openrouter' disabled={!hasOpenRouterKey}>
+                    <div className='flex items-center justify-between w-full'>
+                      <span>OpenRouter</span>
+                      {!hasOpenRouterKey && (
+                        <span className='text-[10px] font-medium bg-muted px-1.5 py-0.5 rounded-full'>
+                          add key
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
