@@ -63,7 +63,7 @@ export function MarkdownMessage({ content, isUser }: MarkdownMessageProps) {
           size='icon'
           variant='ghost'
           className={cn(
-            'absolute top-2 right-2 h-8 w-8 opacity-0 transition-opacity duration-200',
+            'absolute bottom-2 right-2 h-8 w-8 opacity-0 transition-opacity duration-200',
             showCopy && 'opacity-100',
             isUser
               ? 'text-white hover:text-white/80'
@@ -73,7 +73,7 @@ export function MarkdownMessage({ content, isUser }: MarkdownMessageProps) {
         >
           <Copy className='h-4 w-4' />
           {copied && (
-            <span className='absolute -top-8 right-0 text-xs bg-black text-white px-2 py-1 rounded shadow-md'>
+            <span className='absolute -bottom-8 right-0 text-xs bg-black text-white px-2 py-1 rounded shadow-md'>
               Copied!
             </span>
           )}

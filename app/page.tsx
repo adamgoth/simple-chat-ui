@@ -98,9 +98,11 @@ export default function ChatPage() {
       const currentConversation = conversations.find(
         (conv) => conv.id === currentConversationId,
       );
-      if (currentConversation) {
+      if (currentConversation && currentConversation.messages.length > 0) {
         setMessages(currentConversation.messages);
       }
+    } else {
+      setMessages([]);
     }
   }, [currentConversationId, conversations]);
 
@@ -119,7 +121,45 @@ export default function ChatPage() {
     setMessages(newMessages);
   };
 
-  const sendMessage = async (message: string) => {
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    let conversationId = currentConversationId;
+
+    // Create new conversation if none exists
+    if (!conversationId) {
+      const newConversation: Conversation = {
+        id: Date.now().toString(),
+        title: `Conversation ${conversations.length + 1}`,
+        messages: [],
+      };
+
+      // Update conversations first
+      setConversations((prev) => [...prev, newConversation]);
+      setCurrentConversationId(newConversation.id);
+      conversationId = newConversation.id;
+    }
+
+    // Create the message
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: input,
+    };
+
+    // Update local messages state
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+
+    // Update conversation with the new message
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId ? { ...conv, messages: newMessages } : conv,
+      ),
+    );
+
+    // Now send the message
     try {
       setIsLoading(true);
 
@@ -127,18 +167,9 @@ export default function ChatPage() {
         throw new Error('Please select a model first');
       }
 
-      // Add user message to the UI immediately
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: message,
-      };
-      const updatedMessages = [...messages, userMessage];
-      updateConversationMessages(updatedMessages);
-
       // Prepare the request body based on model type
       const requestBody = {
-        messages: updatedMessages,
+        messages: newMessages,
         model: model,
       };
 
@@ -169,10 +200,19 @@ export default function ChatPage() {
         role: 'assistant',
         content: data.content || data.message,
       };
-      updateConversationMessages([...updatedMessages, assistantMessage]);
+
+      // Update both states atomically
+      const updatedMessages = [...newMessages, assistantMessage];
+      setMessages(updatedMessages);
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === conversationId
+            ? { ...conv, messages: updatedMessages }
+            : conv,
+        ),
+      );
     } catch (error) {
       console.error('Error sending message:', error);
-      // TODO: Add error handling in UI
       alert(error instanceof Error ? error.message : 'Failed to send message');
     } finally {
       setIsLoading(false);
@@ -180,31 +220,19 @@ export default function ChatPage() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter') {
-      if (e.shiftKey) {
-        // Allow default behavior for Shift+Enter (new line)
-        return;
-      } else {
-        // Prevent default form submission and send message
-        e.preventDefault();
-        if (input.trim()) {
-          if (!currentConversationId) {
-            createNewConversation();
-          }
-          sendMessage(input);
-        }
-      }
-    }
+  const sendMessage = async (message: string) => {
+    // Create a form event and submit it
+    const event = new Event('submit') as any;
+    await handleFormSubmit(event);
   };
 
-  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!currentConversationId) {
-      createNewConversation();
-    }
-    if (input.trim()) {
-      await sendMessage(input);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim()) {
+        const event = new Event('submit') as any;
+        handleFormSubmit(event);
+      }
     }
   };
 
@@ -214,7 +242,7 @@ export default function ChatPage() {
       title: `Conversation ${conversations.length + 1}`,
       messages: [],
     };
-    setConversations([...conversations, newConversation]);
+    setConversations((prev) => [...prev, newConversation]);
     setCurrentConversationId(newConversation.id);
     setMessages([]);
   };
