@@ -17,8 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Message } from '@/types/message';
-import type { Conversation } from '@/types/conversation';
+import { Message, Conversation } from '@/types/chat';
 import { ChatMarkdownRenderer } from '@/components/ChatMarkdownRenderer';
 import { useEnvKey } from '@/hooks/useEnvKey';
 import { Loader2 } from 'lucide-react';
@@ -60,7 +59,7 @@ export default function ChatPage() {
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<
-    string | null
+    number | null
   >(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -68,6 +67,22 @@ export default function ChatPage() {
 
   // Simplified hook usage
   const { hasKey: hasOpenRouterKey } = useEnvKey('OPENROUTER_API_KEY');
+
+  // Fetch conversations on mount
+  useEffect(() => {
+    const fetchConversations = async () => {
+      try {
+        const response = await fetch('/api/conversations');
+        if (!response.ok) throw new Error('Failed to fetch conversations');
+        const data = await response.json();
+        setConversations(data);
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      }
+    };
+
+    fetchConversations();
+  }, []);
 
   // If OpenRouter is selected but there's no key, switch to Ollama
   useEffect(() => {
@@ -108,16 +123,26 @@ export default function ChatPage() {
   // Sync messages with current conversation
   useEffect(() => {
     if (currentConversationId) {
-      const currentConversation = conversations.find(
-        (conv) => conv.id === currentConversationId,
-      );
-      if (currentConversation && currentConversation.messages.length > 0) {
-        setMessages(currentConversation.messages);
-      }
+      const fetchConversation = async () => {
+        try {
+          const response = await fetch(
+            `/api/conversations/${currentConversationId}`,
+          );
+          if (!response.ok) throw new Error('Failed to fetch conversation');
+          const data = await response.json();
+          if (data.messages) {
+            setMessages(data.messages);
+          }
+        } catch (error) {
+          console.error('Error fetching conversation:', error);
+        }
+      };
+
+      fetchConversation();
     } else {
       setMessages([]);
     }
-  }, [currentConversationId, conversations]);
+  }, [currentConversationId]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
@@ -145,88 +170,108 @@ export default function ChatPage() {
 
     // Create new conversation if none exists
     if (!conversationId) {
-      const newConversation: Conversation = {
-        id: Date.now().toString(),
-        title: `Conversation ${conversations.length + 1}`,
-        messages: [],
-      };
+      try {
+        const response = await fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Conversation ${conversations.length + 1}`,
+            model: model,
+            llm: modelType,
+          }),
+        });
 
-      // Update conversations first
-      setConversations((prev) => [...prev, newConversation]);
-      setCurrentConversationId(newConversation.id);
-      conversationId = newConversation.id;
+        if (!response.ok) throw new Error('Failed to create conversation');
+        const data = await response.json();
+        conversationId = data.conversation.id;
+        setCurrentConversationId(conversationId);
+        setConversations((prev) => [...prev, data.conversation]);
+      } catch (error) {
+        console.error('Error creating conversation:', error);
+        alert('Failed to create conversation');
+        return;
+      }
+    }
+
+    // Ensure we have a valid conversation ID
+    if (!conversationId) {
+      alert('Failed to create or find conversation');
+      return;
     }
 
     // Create the message
     const userMessage: Message = {
-      id: Date.now().toString(),
       role: 'user',
       content: input.trim(),
+      model: model,
+      llm: modelType,
+      conversation_id: conversationId,
     };
 
-    // Update local messages state
-    const newMessages = [...messages, userMessage];
-    setMessages(newMessages);
-
-    // Update conversation with the new message
-    setConversations((prev) =>
-      prev.map((conv) =>
-        conv.id === conversationId ? { ...conv, messages: newMessages } : conv,
-      ),
-    );
-
-    // Now send the message
+    // Save the message
     try {
       setIsLoading(true);
 
+      const response = await fetch(
+        `/api/conversations/${conversationId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(userMessage),
+        },
+      );
+
+      if (!response.ok) throw new Error('Failed to save message');
+      const data = await response.json();
+      setMessages(data.messages);
+
+      // Now send the message to the AI
       if (!model) {
         throw new Error('Please select a model first');
       }
 
-      // Prepare the request body based on model type
-      const requestBody = {
-        messages: newMessages,
-        model: model,
-      };
-
-      // Send the message to the appropriate API endpoint
-      const response = await fetch(
+      const aiResponse = await fetch(
         modelType === 'openrouter'
           ? '/api/chat-openrouter'
           : '/api/chat-ollama',
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: data.messages,
+            model: model,
+          }),
         },
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to send message');
+      if (!aiResponse.ok) {
+        const errorData = await aiResponse.json();
+        throw new Error(errorData.error || 'Failed to get AI response');
       }
 
-      const data = await response.json();
+      const aiData = await aiResponse.json();
 
-      // Add assistant's response to the messages
+      // Save AI's response
       const assistantMessage: Message = {
-        id: Date.now().toString(),
         role: 'assistant',
-        content: data.content || data.message,
+        content: aiData.content || aiData.message,
+        model: model,
+        llm: modelType,
+        conversation_id: conversationId,
       };
 
-      // Update both states atomically
-      const updatedMessages = [...newMessages, assistantMessage];
-      setMessages(updatedMessages);
-      setConversations((prev) =>
-        prev.map((conv) =>
-          conv.id === conversationId
-            ? { ...conv, messages: updatedMessages }
-            : conv,
-        ),
+      const saveResponse = await fetch(
+        `/api/conversations/${conversationId}/messages`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(assistantMessage),
+        },
       );
+
+      if (!saveResponse.ok) throw new Error('Failed to save AI response');
+      const finalData = await saveResponse.json();
+      setMessages(finalData.messages);
     } catch (error) {
       console.error('Error sending message:', error);
       alert(error instanceof Error ? error.message : 'Failed to send message');
@@ -245,19 +290,40 @@ export default function ChatPage() {
     }
   };
 
-  const createNewConversation = () => {
-    const newConversation: Conversation = {
-      id: Date.now().toString(),
-      title: `Conversation ${conversations.length + 1}`,
-      messages: [],
-    };
-    setConversations((prev) => [...prev, newConversation]);
-    setCurrentConversationId(newConversation.id);
-    setMessages([]);
+  const createNewConversation = async () => {
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `Conversation ${conversations.length + 1}`,
+          model: model,
+          llm: modelType,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to create conversation');
+      const data = await response.json();
+      setConversations((prev) => [...prev, data.conversation]);
+      setCurrentConversationId(data.conversation.id);
+      setMessages([]);
+    } catch (error) {
+      console.error('Error creating conversation:', error);
+      alert('Failed to create conversation');
+    }
   };
 
-  const selectConversation = (conversationId: string) => {
-    setCurrentConversationId(conversationId);
+  const selectConversation = async (conversationId: number) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`);
+      if (!response.ok) throw new Error('Failed to fetch conversation');
+      const data = await response.json();
+      setCurrentConversationId(conversationId);
+      setMessages(data.messages);
+    } catch (error) {
+      console.error('Error fetching conversation:', error);
+      alert('Failed to load conversation');
+    }
   };
 
   return (
