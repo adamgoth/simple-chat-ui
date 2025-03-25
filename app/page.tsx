@@ -21,6 +21,7 @@ import { Message } from '@/types/message';
 import type { Conversation } from '@/types/conversation';
 import { ChatMarkdownRenderer } from '@/components/ChatMarkdownRenderer';
 import { useEnvKey } from '@/hooks/useEnvKey';
+import { Loader2 } from 'lucide-react';
 
 const OPENROUTER_MODELS = [
   {
@@ -89,7 +90,7 @@ export default function ChatPage() {
           data.models?.map((model: { name: string }) => model.name) || [];
         setOllamaModels(modelNames);
 
-        // Set default model if we don't have one selected yet
+        // Only set default model if we don't have one selected yet
         if (modelNames.length > 0 && (!model || modelType === 'ollama')) {
           setModel(modelNames[0]);
         }
@@ -102,7 +103,7 @@ export default function ChatPage() {
     if (modelType === 'ollama') {
       fetchOllamaModels();
     }
-  }, [modelType, model]); // Added model to dependencies
+  }, [modelType]); // Remove model from dependencies to prevent the cycle
 
   // Sync messages with current conversation
   useEffect(() => {
@@ -137,6 +138,9 @@ export default function ChatPage() {
     e.preventDefault();
     if (!input.trim()) return;
 
+    // Clear input immediately
+    setInput('');
+
     let conversationId = currentConversationId;
 
     // Create new conversation if none exists
@@ -157,7 +161,7 @@ export default function ChatPage() {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: input.trim(),
     };
 
     // Update local messages state
@@ -228,14 +232,7 @@ export default function ChatPage() {
       alert(error instanceof Error ? error.message : 'Failed to send message');
     } finally {
       setIsLoading(false);
-      setInput('');
     }
-  };
-
-  const sendMessage = async (message: string) => {
-    // Create a form event and submit it
-    const event = new Event('submit') as any;
-    await handleFormSubmit(event);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -360,6 +357,14 @@ export default function ChatPage() {
                   />
                 </div>
               ))}
+              {isLoading && (
+                <div className='flex justify-start'>
+                  <div className='bg-gray-200 rounded-lg p-4 flex items-center gap-2'>
+                    <Loader2 className='h-4 w-4 animate-spin' />
+                    <span className='text-sm text-gray-600'>Thinking...</span>
+                  </div>
+                </div>
+              )}
             </div>
           </CardContent>
           <CardFooter>
