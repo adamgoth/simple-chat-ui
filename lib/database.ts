@@ -146,6 +146,18 @@ class DatabaseService {
       )
       .all(userId, `%${query}%`, `%${query}%`);
   }
+
+  updateConversationTitle(conversationId: number, title: string) {
+    return this.db
+      .prepare(
+        `
+      UPDATE conversations 
+      SET title = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `,
+      )
+      .run(title, conversationId);
+  }
 }
 
 // Export a singleton instance

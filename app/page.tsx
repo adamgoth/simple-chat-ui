@@ -21,6 +21,7 @@ import { Message, Conversation } from '@/types/chat';
 import { ChatMarkdownRenderer } from '@/components/ChatMarkdownRenderer';
 import { useEnvKey } from '@/hooks/useEnvKey';
 import { Loader2 } from 'lucide-react';
+import { ConversationTitle } from '@/components/ConversationTitle';
 
 const OPENROUTER_MODELS = [
   {
@@ -326,6 +327,14 @@ export default function ChatPage() {
     }
   };
 
+  const handleTitleChange = (conversationId: number, newTitle: string) => {
+    setConversations((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId ? { ...conv, title: newTitle } : conv,
+      ),
+    );
+  };
+
   return (
     <div className='container mx-auto max-w-6xl pt-10 flex'>
       <div className='w-1/4 pr-4'>
@@ -338,18 +347,14 @@ export default function ChatPage() {
               New Conversation
             </Button>
             {conversations.map((conversation) => (
-              <Button
+              <ConversationTitle
                 key={conversation.id}
+                id={conversation.id}
+                title={conversation.title}
+                onTitleChange={handleTitleChange}
+                isSelected={currentConversationId === conversation.id}
                 onClick={() => selectConversation(conversation.id)}
-                variant={
-                  currentConversationId === conversation.id
-                    ? 'default'
-                    : 'ghost'
-                }
-                className='w-full justify-start mb-2'
-              >
-                {conversation.title}
-              </Button>
+              />
             ))}
           </CardContent>
         </Card>

@@ -42,3 +42,38 @@ export async function DELETE(
     );
   }
 }
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } },
+) {
+  try {
+    const conversationId = parseInt(params.id);
+    const { title } = await request.json();
+
+    if (!title || typeof title !== 'string') {
+      return NextResponse.json(
+        { error: 'Title is required and must be a string' },
+        { status: 400 },
+      );
+    }
+
+    dbService.updateConversationTitle(conversationId, title);
+    const conversation = dbService.getConversation(conversationId);
+
+    if (!conversation) {
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json(conversation);
+  } catch (error) {
+    console.error('Error updating conversation title:', error);
+    return NextResponse.json(
+      { error: 'Failed to update conversation title' },
+      { status: 500 },
+    );
+  }
+}
