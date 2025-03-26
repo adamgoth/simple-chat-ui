@@ -335,6 +335,16 @@ export default function ChatPage() {
     );
   };
 
+  const handleDelete = (conversationId: number) => {
+    setConversations((prev) =>
+      prev.filter((conv) => conv.id !== conversationId),
+    );
+    if (currentConversationId === conversationId) {
+      setCurrentConversationId(null);
+      setMessages([]);
+    }
+  };
+
   return (
     <div className='container mx-auto max-w-6xl pt-10 flex'>
       <div className='w-1/4 pr-4'>
@@ -352,6 +362,7 @@ export default function ChatPage() {
                 id={conversation.id}
                 title={conversation.title}
                 onTitleChange={handleTitleChange}
+                onDelete={handleDelete}
                 isSelected={currentConversationId === conversation.id}
                 onClick={() => selectConversation(conversation.id)}
               />
