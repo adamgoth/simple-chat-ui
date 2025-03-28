@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Pencil, Check, X, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Check, X, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,6 +12,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 interface ConversationTitleProps {
   id: number;
@@ -36,17 +42,14 @@ export function ConversationTitle({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('isEditing changed:', isEditing);
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
     }
   }, [isEditing]);
 
   const handleEditClick = (e: React.MouseEvent) => {
-    console.log('Edit icon clicked');
     e.preventDefault();
     e.stopPropagation();
-    console.log('Setting isEditing to true');
     setIsEditing(true);
   };
 
@@ -68,7 +71,6 @@ export function ConversationTitle({
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating title:', error);
-      // Revert to original title on error
       setEditTitle(title);
     }
   };
@@ -146,23 +148,32 @@ export function ConversationTitle({
           variant={isSelected ? 'default' : 'ghost'}
           className='w-full justify-start'
         >
-          <span className='flex-1 truncate'>{title}</span>
+          <span className='flex-1 truncate text-left'>{title}</span>
         </Button>
-        <div className='absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity'>
-          <button
-            onClick={handleEditClick}
-            className='p-1 rounded-full hover:bg-gray-200'
-            title='Edit'
-          >
-            <Pencil className='h-4 w-4' />
-          </button>
-          <button
-            onClick={handleDeleteClick}
-            className='p-1 rounded-full hover:bg-gray-200 text-red-600'
-            title='Delete'
-          >
-            <Trash2 className='h-4 w-4' />
-          </button>
+        <div className='absolute right-2 top-1/2 -translate-y-1/2'>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className='p-1 rounded-full hover:bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity'
+              >
+                <MoreHorizontal className='h-4 w-4' />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align='end'>
+              <DropdownMenuItem onClick={handleEditClick}>
+                <Pencil className='mr-2 h-4 w-4' />
+                <span>Rename</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleDeleteClick}
+                className='text-red-600'
+              >
+                <Trash2 className='mr-2 h-4 w-4' />
+                <span>Delete</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
