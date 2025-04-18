@@ -54,6 +54,16 @@ const OPENROUTER_MODELS = [
   },
 ] as const;
 
+// Helper function for sorting conversations
+const sortConversations = (conversations: Conversation[]) => {
+  return [...conversations].sort((a, b) => {
+    // Ensure updated_at exists and handle potential undefined/null
+    const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+    const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    return dateB - dateA; // Descending order
+  });
+};
+
 export default function ChatPage() {
   const [modelType, setModelType] = useState<'ollama' | 'openrouter'>('ollama');
   const [model, setModel] = useState<string>('llama2');
@@ -76,7 +86,7 @@ export default function ChatPage() {
         const response = await fetch('/api/conversations');
         if (!response.ok) throw new Error('Failed to fetch conversations');
         const data = await response.json();
-        setConversations(data);
+        setConversations(data); // Already sorted by API
       } catch (error) {
         console.error('Error fetching conversations:', error);
       }
@@ -169,8 +179,8 @@ export default function ChatPage() {
     setInput('');
 
     let conversationId = currentConversationId;
-    let isNewConversation = false; // Flag to track if we just created a conversation
-    let newConversationData: Conversation | null = null; // To hold newly created conversation data
+    let isNewConversation = false;
+    let newConversationData: Conversation | null = null;
 
     // Create new conversation if none exists
     if (!conversationId) {
@@ -187,16 +197,19 @@ export default function ChatPage() {
 
         if (!response.ok) throw new Error('Failed to create conversation');
         const data = await response.json();
-        newConversationData = data.conversation; // Store conversation data
-        conversationId = newConversationData!.id; // Use exclamation mark since we check below
+        newConversationData = data.conversation;
+        conversationId = newConversationData!.id;
         setCurrentConversationId(conversationId);
-        // Add the new conversation with the temporary title and empty messages array
-        setConversations((prev) => [
-          ...prev,
-          { ...newConversationData!, messages: [] },
-        ]);
-        setMessages([]); // Clear messages for the new chat
-        isNewConversation = true; // Mark as new conversation
+
+        // Add the new conversation to the *beginning* and sort
+        setConversations((prev) =>
+          sortConversations([
+            { ...newConversationData!, messages: [] },
+            ...prev,
+          ]),
+        );
+        setMessages([]);
+        isNewConversation = true;
       } catch (error) {
         console.error('Error creating conversation:', error);
         alert('Failed to create conversation');
@@ -250,6 +263,16 @@ export default function ChatPage() {
       // Update messages state with the actual data from the DB
       setMessages(savedConversationData.messages);
 
+      // --- Update and re-sort conversations list after user message ---
+      setConversations((prev) => {
+        const updatedList = prev.map((conv) =>
+          conv.id === conversationId
+            ? savedConversationData.conversation
+            : conv,
+        );
+        return sortConversations(updatedList);
+      });
+
       // --- Generate Title in background if it's the first message ---
       if (isFirstMessageForTitle) {
         // No need to await this, let it run in the background
@@ -288,22 +311,19 @@ export default function ChatPage() {
         throw new Error('Please select a model first');
       }
 
-      const aiResponse = await fetch(
-        modelType === 'openrouter'
-          ? '/api/chat-openrouter'
-          : '/api/chat-ollama',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: savedConversationData.messages, // Use messages returned after saving user message
-            model: model,
-          }),
-        },
-      );
+      const apiEndpoint =
+        modelType === 'ollama' ? '/api/chat-ollama' : '/api/chat-openrouter';
+      const chatResponse = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: model,
+          messages: savedConversationData.messages, // Send updated history
+        }),
+      });
 
-      if (!aiResponse.ok) {
-        const errorData = await aiResponse.json();
+      if (!chatResponse.ok) {
+        const errorData = await chatResponse.json();
         // Revert optimistic update
         setMessages((prevMessages) =>
           prevMessages.filter((msg) => msg !== userMessage),
@@ -311,16 +331,12 @@ export default function ChatPage() {
         throw new Error(errorData.error || 'Failed to get AI response');
       }
 
-      const aiData = await aiResponse.json();
+      const aiResponseData = await chatResponse.json();
 
       // Create the AI message object
       const assistantMessage: Message = {
         role: 'assistant',
-        // Handle potential differences in response structure (e.g., Ollama vs OpenRouter)
-        content:
-          typeof aiData.message === 'object'
-            ? aiData.message.content
-            : aiData.content || aiData.message,
+        content: aiResponseData.content, // Assuming response has { content: string }
         model: model,
         llm: modelType,
         conversation_id: conversationId,
@@ -329,8 +345,8 @@ export default function ChatPage() {
       // Add AI message to UI immediately
       setMessages((prevMessages) => [...prevMessages, assistantMessage]);
 
-      // --- Save AI response ---
-      const saveAiResponse = await fetch(
+      // --- Save AI message ---
+      const saveAiMessageResponse = await fetch(
         `/api/conversations/${conversationId}/messages`,
         {
           method: 'POST',
@@ -339,18 +355,24 @@ export default function ChatPage() {
         },
       );
 
-      if (!saveAiResponse.ok) {
-        // If saving AI response fails, remove the optimistically added AI message
-        setMessages((prevMessages) =>
-          prevMessages.filter((msg) => msg !== assistantMessage),
-        );
-        throw new Error('Failed to save AI response');
+      if (!saveAiMessageResponse.ok) {
+        throw new Error('Failed to save assistant message');
       }
-      const finalData = await saveAiResponse.json();
-      // Update with final state from DB after saving AI message
-      setMessages(finalData.messages);
+
+      const finalConversationData = await saveAiMessageResponse.json();
+      setMessages(finalConversationData.messages); // Update messages with AI response
+
+      // --- Update and re-sort conversations list after AI message ---
+      setConversations((prev) => {
+        const updatedList = prev.map((conv) =>
+          conv.id === conversationId
+            ? finalConversationData.conversation
+            : conv,
+        );
+        return sortConversations(updatedList);
+      });
     } catch (error) {
-      console.error('Error during message processing:', error);
+      console.error('Error during chat submission or response:', error);
       alert(
         error instanceof Error ? error.message : 'Failed to process message',
       );
@@ -407,12 +429,17 @@ export default function ChatPage() {
     }
   };
 
-  const handleTitleChange = (conversationId: number, newTitle: string) => {
-    setConversations((prev) =>
-      prev.map((conv) =>
-        conv.id === conversationId ? { ...conv, title: newTitle } : conv,
-      ),
-    );
+  const handleTitleChange = (
+    conversationId: number,
+    updatedConversation: Conversation, // Accept full object
+  ) => {
+    setConversations((prev) => {
+      const updatedList = prev.map((conv) =>
+        conv.id === conversationId ? updatedConversation : conv,
+      );
+      // Re-sort the list after updating
+      return sortConversations(updatedList);
+    });
   };
 
   const handleDelete = (conversationId: number) => {
@@ -433,7 +460,10 @@ export default function ChatPage() {
             <CardTitle>Conversations</CardTitle>
           </CardHeader>
           <CardContent>
-            <Button onClick={createNewConversation} className='w-full mb-4'>
+            <Button
+              onClick={createNewConversation}
+              className='w-full mb-4 bg-green-600 text-white hover:bg-green-700'
+            >
               New Conversation
             </Button>
             {conversations.map((conversation) => (

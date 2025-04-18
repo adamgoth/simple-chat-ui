@@ -10,7 +10,7 @@ import {
   Sparkles,
   Loader2,
 } from 'lucide-react';
-import { Message } from '@/types/chat';
+import { Message, Conversation } from '@/types/chat';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,11 +27,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
 
 interface ConversationTitleProps {
   id: number;
   title: string;
-  onTitleChange: (id: number, newTitle: string) => void;
+  onTitleChange: (id: number, updatedConversation: Conversation) => void;
   onDelete: (id: number) => void;
   isSelected: boolean;
   onClick: () => void;
@@ -78,7 +79,8 @@ export function ConversationTitle({
       });
 
       if (!response.ok) throw new Error('Failed to update title');
-      onTitleChange(id, editTitle.trim());
+      const updatedConversation: Conversation = await response.json();
+      onTitleChange(id, updatedConversation);
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating title:', error);
@@ -149,7 +151,14 @@ export function ConversationTitle({
       const data = await titleResponse.json();
 
       if (data && data.title) {
-        onTitleChange(id, data.title);
+        const getConvResponse = await fetch(`/api/conversations/${id}`);
+        if (!getConvResponse.ok)
+          throw new Error(
+            'Failed to fetch updated conversation after title generation',
+          );
+        const updatedConversation: Conversation = await getConvResponse.json();
+
+        onTitleChange(id, updatedConversation);
         setIsMenuOpen(false);
       } else {
         throw new Error('API did not return a valid title.');
@@ -202,8 +211,13 @@ export function ConversationTitle({
       <div className='relative mb-2 group'>
         <Button
           onClick={onClick}
-          variant={isSelected ? 'default' : 'ghost'}
-          className='w-full justify-start'
+          variant={'ghost'}
+          className={cn(
+            'w-full justify-start',
+            isSelected
+              ? 'bg-gray-200 dark:bg-gray-700 text-accent-foreground'
+              : '',
+          )}
         >
           <span className='flex-1 truncate text-left'>{title}</span>
         </Button>
