@@ -1,7 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { MoreHorizontal, Pencil, Check, X, Trash2 } from 'lucide-react';
+import {
+  MoreHorizontal,
+  Pencil,
+  Check,
+  X,
+  Trash2,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
+import { Message } from '@/types/chat';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +48,8 @@ export function ConversationTitle({
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(title);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -109,6 +120,52 @@ export function ConversationTitle({
     }
   };
 
+  const handleGenerateTitleClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsGeneratingTitle(true);
+    try {
+      const convResponse = await fetch(`/api/conversations/${id}`);
+      if (!convResponse.ok)
+        throw new Error('Failed to fetch conversation data');
+      const convData = await convResponse.json();
+      const messages: Message[] = convData.messages;
+
+      if (!messages || messages.length === 0) {
+        throw new Error('No messages found to generate title from.');
+      }
+
+      const titleResponse = await fetch('/api/generate-title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: id, messages: messages }),
+      });
+
+      if (!titleResponse.ok) {
+        const errorData = await titleResponse.json();
+        throw new Error(errorData.error || 'Failed to generate title');
+      }
+
+      const data = await titleResponse.json();
+
+      if (data && data.title) {
+        onTitleChange(id, data.title);
+        setIsMenuOpen(false);
+      } else {
+        throw new Error('API did not return a valid title.');
+      }
+    } catch (error) {
+      console.error('Error generating title:', error);
+      alert(
+        `Failed to generate title: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    } finally {
+      setIsGeneratingTitle(false);
+    }
+  };
+
   if (isEditing) {
     return (
       <div
@@ -151,22 +208,50 @@ export function ConversationTitle({
           <span className='flex-1 truncate text-left'>{title}</span>
         </Button>
         <div className='absolute right-2 top-1/2 -translate-y-1/2'>
-          <DropdownMenu>
+          <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
             <DropdownMenuTrigger asChild>
               <button
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
                 className='p-1 rounded-full hover:bg-gray-200 opacity-0 group-hover:opacity-100 transition-opacity'
               >
                 <MoreHorizontal className='h-4 w-4' />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align='end'>
-              <DropdownMenuItem onClick={handleEditClick}>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleEditClick(e as any);
+                }}
+              >
                 <Pencil className='mr-2 h-4 w-4' />
                 <span>Rename</span>
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={handleDeleteClick}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  if (!isGeneratingTitle) {
+                    handleGenerateTitleClick(e as any);
+                  }
+                }}
+                disabled={isGeneratingTitle}
+              >
+                {isGeneratingTitle ? (
+                  <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                ) : (
+                  <Sparkles className='mr-2 h-4 w-4' />
+                )}
+                <span>
+                  {isGeneratingTitle ? 'Generating...' : 'Generate Title'}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleDeleteClick(e as any);
+                }}
                 className='text-red-600'
               >
                 <Trash2 className='mr-2 h-4 w-4' />

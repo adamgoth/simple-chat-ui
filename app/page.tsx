@@ -162,12 +162,15 @@ export default function ChatPage() {
 
   const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    const messageContent = input.trim(); // Store trimmed input
+    if (!messageContent) return;
 
     // Clear input immediately
     setInput('');
 
     let conversationId = currentConversationId;
+    let isNewConversation = false; // Flag to track if we just created a conversation
+    let newConversationData: Conversation | null = null; // To hold newly created conversation data
 
     // Create new conversation if none exists
     if (!conversationId) {
@@ -176,7 +179,7 @@ export default function ChatPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: `Conversation ${conversations.length + 1}`,
+            title: 'New Chat', // Use temporary title
             model: model,
             llm: modelType,
           }),
@@ -184,9 +187,16 @@ export default function ChatPage() {
 
         if (!response.ok) throw new Error('Failed to create conversation');
         const data = await response.json();
-        conversationId = data.conversation.id;
+        newConversationData = data.conversation; // Store conversation data
+        conversationId = newConversationData!.id; // Use exclamation mark since we check below
         setCurrentConversationId(conversationId);
-        setConversations((prev) => [...prev, data.conversation]);
+        // Add the new conversation with the temporary title and empty messages array
+        setConversations((prev) => [
+          ...prev,
+          { ...newConversationData!, messages: [] },
+        ]);
+        setMessages([]); // Clear messages for the new chat
+        isNewConversation = true; // Mark as new conversation
       } catch (error) {
         console.error('Error creating conversation:', error);
         alert('Failed to create conversation');
@@ -200,20 +210,27 @@ export default function ChatPage() {
       return;
     }
 
-    // Create the message
+    // Create the user message object
     const userMessage: Message = {
       role: 'user',
-      content: input.trim(),
+      content: messageContent, // Use stored trimmed content
       model: model,
       llm: modelType,
       conversation_id: conversationId,
     };
 
-    // Save the message
+    // Immediately add user message to the UI for responsiveness
+    // Use a functional update to ensure we have the latest messages state
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
+
+    // Check if it's the first message being sent *for this specific conversation*
+    const isFirstMessageForTitle = isNewConversation; // Trigger only for the first message submit of a new conversation
+
     try {
       setIsLoading(true);
 
-      const response = await fetch(
+      // --- Save user message ---
+      const saveUserMessageResponse = await fetch(
         `/api/conversations/${conversationId}/messages`,
         {
           method: 'POST',
@@ -222,12 +239,52 @@ export default function ChatPage() {
         },
       );
 
-      if (!response.ok) throw new Error('Failed to save message');
-      const data = await response.json();
-      setMessages(data.messages);
+      if (!saveUserMessageResponse.ok) {
+        // If saving fails, remove the optimistically added message
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg !== userMessage),
+        );
+        throw new Error('Failed to save user message');
+      }
+      const savedConversationData = await saveUserMessageResponse.json();
+      // Update messages state with the actual data from the DB
+      setMessages(savedConversationData.messages);
 
-      // Now send the message to the AI
+      // --- Generate Title in background if it's the first message ---
+      if (isFirstMessageForTitle) {
+        // No need to await this, let it run in the background
+        fetch('/api/generate-title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: conversationId,
+            messageContent: messageContent,
+          }),
+        })
+          .then((titleResponse) => {
+            if (titleResponse.ok) {
+              return titleResponse.json();
+            }
+            console.warn('Failed to generate title automatically.');
+            return null; // Return null if title generation failed
+          })
+          .then((data) => {
+            if (data && data.title) {
+              // Update the title in the sidebar using the existing handler
+              handleTitleChange(conversationId!, data.title);
+            }
+          })
+          .catch((titleError) => {
+            console.error('Error generating title:', titleError);
+          });
+      }
+
+      // --- Get AI response ---
       if (!model) {
+        // Revert optimistic update if model selection is missing
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg !== userMessage),
+        );
         throw new Error('Please select a model first');
       }
 
@@ -239,7 +296,7 @@ export default function ChatPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: data.messages,
+            messages: savedConversationData.messages, // Use messages returned after saving user message
             model: model,
           }),
         },
@@ -247,21 +304,33 @@ export default function ChatPage() {
 
       if (!aiResponse.ok) {
         const errorData = await aiResponse.json();
+        // Revert optimistic update
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg !== userMessage),
+        );
         throw new Error(errorData.error || 'Failed to get AI response');
       }
 
       const aiData = await aiResponse.json();
 
-      // Save AI's response
+      // Create the AI message object
       const assistantMessage: Message = {
         role: 'assistant',
-        content: aiData.content || aiData.message,
+        // Handle potential differences in response structure (e.g., Ollama vs OpenRouter)
+        content:
+          typeof aiData.message === 'object'
+            ? aiData.message.content
+            : aiData.content || aiData.message,
         model: model,
         llm: modelType,
         conversation_id: conversationId,
       };
 
-      const saveResponse = await fetch(
+      // Add AI message to UI immediately
+      setMessages((prevMessages) => [...prevMessages, assistantMessage]);
+
+      // --- Save AI response ---
+      const saveAiResponse = await fetch(
         `/api/conversations/${conversationId}/messages`,
         {
           method: 'POST',
@@ -270,12 +339,23 @@ export default function ChatPage() {
         },
       );
 
-      if (!saveResponse.ok) throw new Error('Failed to save AI response');
-      const finalData = await saveResponse.json();
+      if (!saveAiResponse.ok) {
+        // If saving AI response fails, remove the optimistically added AI message
+        setMessages((prevMessages) =>
+          prevMessages.filter((msg) => msg !== assistantMessage),
+        );
+        throw new Error('Failed to save AI response');
+      }
+      const finalData = await saveAiResponse.json();
+      // Update with final state from DB after saving AI message
       setMessages(finalData.messages);
     } catch (error) {
-      console.error('Error sending message:', error);
-      alert(error instanceof Error ? error.message : 'Failed to send message');
+      console.error('Error during message processing:', error);
+      alert(
+        error instanceof Error ? error.message : 'Failed to process message',
+      );
+      // Note: More sophisticated error handling might be needed to fully revert UI state
+      // depending on where the error occurred. For now, we revert optimistic updates on known failures.
     } finally {
       setIsLoading(false);
     }

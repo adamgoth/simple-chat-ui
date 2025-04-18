@@ -1,8 +1,7 @@
-import type { Message } from "./message"
+import type { Message } from './chat';
 
 export interface Conversation {
-  id: string
-  title: string
-  messages: Message[]
+  id: string;
+  title: string;
+  messages: Message[];
 }
-
